@@ -1,0 +1,438 @@
+openapi: 3.0.3
+info:
+  title: OpenAPI specification for Monitoring Service
+  description: This API allows to create jobs and see their results.
+  version: 1.0.0
+  contact:
+    name: Api Support
+    url: 'https://hansecom.com/support/'
+    email: support@hansecom.com
+  license:
+    name: HanseCom
+    url: 'https://www.hansecom.com'
+
+externalDocs:
+  url: https://www.hansecom.com
+  description: Find out more about our solutions
+
+servers:
+  - url: /monitoring-service
+
+tags:
+  - name: Jobs Management
+    description: These endpoints allow the users to manage their jobs.
+  - name: Jobs Execution
+    description: These endpoints allow the users to retrieve jobs results.
+
+paths:
+  /jobs:
+    post:
+      summary: Creates a new job.
+      description: Persists the new job in the database.
+      operationId: createJob
+      tags:
+        - Jobs Management
+      requestBody:
+        description: Request object to create a job
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Job'
+            examples:
+              Create Job:
+                $ref: '#/components/examples/JobExample'
+      responses:
+        '200':
+          description: Successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+              examples:
+                Job response:
+                  $ref: '#/components/examples/JobExample'
+        '400':
+          $ref: '#/components/responses/400'
+        '409':
+          description: Job conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                Job already exists:
+                  $ref: '#/components/examples/JobAlreadyExistsExample'
+        '422':
+          description: Unprocessable job
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                status: 422
+                type: https://www.hansecom.com/errors/max_jobs_reach
+                title: Max jobs reached
+                code: max_jobs_reach
+                detail: You have reach the system limit of 5 jobs
+                traceId: ffb75ca1385ecb0a362ff9cd029d23de
+        '500':
+          $ref: '#/components/responses/500'
+  /jobs-executions:
+    get:
+      summary: Retrieve jobs executions results.
+      description: Retrieve all jobs executions allowing filtering by job name, url, time range and status.
+      operationId: getJobsExecutions
+      tags:
+        - Jobs Execution
+      parameters:
+        - name: jobName
+          description: Name of the job, the identifier
+          in: query
+          schema:
+            type: string
+            example: google
+        - name: url
+          description: Url to monitor filter
+          in: query
+          schema:
+            type: string
+            example: https://www.google.com
+        - name: status
+          description: Job execution status filter
+          in: query
+          schema:
+            type: string
+            enum:
+              - SUCCEEDED
+              - FAILED
+            example: SUCCEEDED
+        - name: from
+          description: Date time to get results from
+          in: query
+          schema:
+            type: string
+            format: date-time
+            example: "2024-01-01T14:39:25.038600729Z"
+        - name: to
+          description: Date time to get results to
+          in: query
+          schema:
+            type: string
+            format: date-time
+            example: "2024-09-01T14:39:25.038600729Z"
+        - $ref: '#/components/parameters/offset'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort-direction'
+        - $ref: '#/components/parameters/sort-properties'
+      responses:
+        '200':
+          description: Successfully retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobExecutionResponseList'
+        '400':
+          $ref: '#/components/responses/400'
+        '500':
+          $ref: '#/components/responses/500'
+
+components:
+  schemas:
+    ProblemDetail:
+      title: ProblemDetail
+      description: 'The common error object, used to standardize error communication between systems. Adheres to the RFC7807 specification.'
+      type: object
+      additionalProperties: true
+      readOnly: true
+      required:
+        - type
+        - title
+        - code
+        - detail
+      properties:
+        status:
+          type: integer
+          description: Http status.
+          example: 500
+        type:
+          type: string
+          description: A URI reference [RFC3986] to the documentation that identifies the problem.
+          example: 'https://www.hansecom.com/errors/internal_server_error'
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type.
+          example: Internal error on the server.
+        code:
+          type: string
+          description: A short machine readable string indicating the error code. Should be constant.
+          example: internal_server_error
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence of the problem.
+          example: "Some internal server error happen. Please provide the traceId ffb75ca1385ecb0a362ff9cd029d23de to the support team."
+        traceId:
+          type: string
+          description: Request identifier.
+          example: ffb75ca1385ecb0a362ff9cd029d23de
+        invalidParams:
+          type: array
+          description: Used when handling validation errors. Can report multiple errors in the same call. Not present unless the error list is populated.
+          items:
+            $ref: '#/components/schemas/InvalidParamDetail'
+          example:
+            - name: version
+              reason: must be greater than 0
+      example:
+        status: 404
+        type: https://www.hansecom.com/errors/not-found
+        title: Job not found
+        code: job_not_found
+        detail: No Job found for the provided input
+        traceId: ffb75ca1385ecb0a362ff9cd029d23de
+    InvalidParamDetail:
+      description: The object that contains the information about how a validation failed for a parameter.
+      type: object
+      readOnly: true
+      required:
+        - name
+        - reason
+      properties:
+        name:
+          type: string
+          description: The name of the parameter that failed validation.
+          example: version
+        reason:
+          type: string
+          description: The reason why the validation failed.
+          example: must be greater than 0
+      example:
+        name: version
+        reason: must be greater than 0
+    Job:
+      type: object
+      description: Job object.
+      required:
+        - name
+        - description
+        - url
+        - cronExpression
+      properties:
+        name:
+          type: string
+          description: Job name, it's the identifier
+          example: google
+        description:
+          type: string
+          description: Job description
+          example: Check if google website is up
+        url:
+          type: string
+          description: Url to monitor
+          example: https://www.google.com
+        cronExpression:
+          type: string
+          description: Cron expression to schedule the job
+          example: 0/10 * * ? * * *
+        timezone:
+          type: string
+          description: Timezone of the cron expression, defaults to UTC
+          example: Europe/Lisbon
+      example:
+        name: google
+        description: Check if google website is up
+        url: https://www.google.com
+        cronExpression: 0/10 * * ? * * *
+        timezone: Europe/Lisbon
+    JobExecution:
+      type: object
+      description: Job execution object.
+      required:
+        - externalId
+        - jobName
+        - url
+        - status
+        - responseTime
+        - createdDate
+      properties:
+        externalId:
+          type: string
+          format: uuid
+          description: Job execution id
+          example: 638115d9-5d3a-476a-9d2e-ab4cf008b189
+        jobName:
+          type: string
+          description: Job name
+          example: google
+        url:
+          type: string
+          description: Url being monitored
+          example: https://www.google.com
+        status:
+          type: string
+          description: Job execution status
+          enum:
+            - SUCCEEDED
+            - FAILED
+          example: SUCCEEDED
+        errorMessage:
+          type: string
+          description: Job execution error message
+          example: 404 not found
+        responseTime:
+          type: integer
+          description: Job execution response time in milliseconds
+          example: 80
+        createdDate:
+          type: string
+          format: date-time
+          description: When the job execution was done
+          example: "2024-09-01T14:39:25.038600729Z"
+      example:
+        externalId: 638115d9-5d3a-476a-9d2e-ab4cf008b189
+        jobName: google
+        url: https://www.google.com
+        status: SUCCEEDED
+        errorMessage: 404 not found
+        responseTime: 80
+        createdDate: "2024-09-01T14:39:25.038600729Z"
+    JobExecutionResponseList:
+      type: object
+      description: Response object for job execution listing.
+      properties:
+        jobExecutionList:
+          type: array
+          description: List of job executions
+          items:
+            $ref: '#/components/schemas/JobExecution'
+          example:
+            - externalId: 638115d9-5d3a-476a-9d2e-ab4cf008b189
+              jobName: google
+              url: https://www.google.com
+              status: SUCCEEDED
+              errorMessage: 404 not found
+              responseTime: 80
+              createdDate: "2024-09-01T14:39:25.038600729Z"
+        totalPages:
+          type: integer
+          description: The number of total pages
+          example: 10
+        totalElements:
+          type: integer
+          description: The total amount of elements
+          example: 1000
+      example:
+        jobExecutionList:
+          - externalId: 638115d9-5d3a-476a-9d2e-ab4cf008b189
+            jobName: google
+            url: https://www.google.com
+            status: SUCCEEDED
+            errorMessage: 404 not found
+            responseTime: 80
+            createdDate: "2024-09-01T14:39:25.038600729Z"
+        totalPages: 10
+        totalElements: 1000
+  responses:
+    '400':
+      description: Invalid input
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            status: 400
+            type: https://www.hansecom.com/errors/invalid_request_params
+            title: Your request parameters didn't validate
+            code: invalid_request_params
+            detail: prop1 cannot be empty
+            traceId: ffb75ca1385ecb0a362ff9cd029d23de
+            invalidParams:
+              - name: prop1
+                reason: prop1 cannot be empty
+    '500':
+      description: Unknown error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            status: 500
+            type: https://www.hansecom.com/errors/internal_server_error
+            title: Internal error on the server
+            code: internal_server_error
+            detail: "Some internal server error happen. Please provide the traceId ffb75ca1385ecb0a362ff9cd029d23de to the support team."
+            traceId: ffb75ca1385ecb0a362ff9cd029d23de
+
+  parameters:
+    offset:
+      name: offset
+      description: The desired page number.
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        example: 0
+        default: 0
+      example: 0
+    limit:
+      name: limit
+      description: The desired page size.
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        example: 20
+        default: 100
+      example: 20
+    sort-direction:
+      name: sort-direction
+      description: The desired sort direction.
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - ASC
+          - DESC
+        example: DESC
+        default: DESC
+      example: DESC
+    sort-properties:
+      name: sort-properties
+      description: The desired sort properties.
+      in: query
+      required: false
+      schema:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          enum:
+            - createdDate
+            - domain
+          example: createdDate
+        default: [ createdDate ]
+      example: [ createdDate ]
+
+  examples:
+    JobExample:
+      description: Example of job.
+      value:
+        name: google
+        description: Check if google website is up
+        url: https://www.google.com
+        cronExpression: 0/10 * * ? * * *
+        timezone: Europe/Lisbon
+    JobAlreadyExistsExample:
+      description: Example response of job already exists error.
+      value:
+        status: 409,
+        type: https://www.hansecom.com/errors/job_already_exists
+        title: Job already exists,
+        code: job_already_exists,
+        detail: Job with name google already exists,
+        traceId: ffb75ca1385ecb0a362ff9cd029d23de,
+        jobName: google

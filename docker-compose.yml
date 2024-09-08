@@ -1,0 +1,10 @@
+services:
+  db:
+    container_name: monitoring-service-postgres
+    image: postgres:16.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: monitoring_service

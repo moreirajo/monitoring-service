@@ -1,0 +1,110 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /\[maven-release-plugin\]/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - when: always
+
+variables:
+  MAVEN_OPTS: "-Dhttps.protocols=TLSv1.2 -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version --settings maven-settings.xml"
+  GIT_SUBMODULE_STRATEGY: normal
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+  GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  DEFAULT_MAVEN_IMAGE: maven:3-eclipse-temurin-21-jammy
+
+#Caching .m2/repository per project
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository
+
+stages:
+  - lint
+  - maven-verify
+  - build
+  - deploy
+
+openapi-linting:
+  stage: lint
+  image: dshanley/vacuum:latest # pin the version if necessary
+  script:
+    - cd src/main/resources/static
+    - vacuum lint openapi.yaml --ignore-file ignore.yaml -d -n warn
+
+maven-verify:
+  stage: maven-verify
+  image: $DEFAULT_MAVEN_IMAGE
+  # DinD service is required for Testcontainers
+  services:
+    - docker:27-dind
+  variables:
+    # Instruct Testcontainers to use the daemon of DinD.
+    DOCKER_HOST: "tcp://docker:2375"
+    # Instruct Docker not to start over TLS.
+    DOCKER_TLS_CERTDIR: ""
+    # Improve performance with overlayfs.
+    DOCKER_DRIVER: overlay2
+  cache:
+    key: "${CI_PROJECT_NAME}"
+    paths:
+      - .m2/repository
+  script:
+    - mvn verify $MAVEN_CLI_OPTS
+  rules:
+    - if: $CI_MERGE_REQUEST_ID            # Execute job when a new commit is pushed to MR
+    - if: $CI_COMMIT_BRANCH               # Execute job when a new commit is pushed to any branch
+  artifacts:
+    paths:
+      - target/surefire-reports/TEST-*.xml
+      - target/site/jacoco/
+      - target/apidocs/
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+    expire_in: 90 days
+
+docker-build:
+  stage: build
+  image: $DEFAULT_MAVEN_IMAGE
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
+  script:
+    - mvn compile jib:build $MAVEN_CLI_OPTS -Djib.to.auth.username=$CI_REGISTRY_USER -Djib.to.auth.password=$CI_REGISTRY_PASSWORD
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+mkdocs:
+  image: jelle/mkdocs:1.4.2
+  stage: build
+  before_script:
+    - pip install mdx_include
+    - pip install mkdocs-material=="9.5.2"
+  script:
+    - cd src/doc/
+    - mkdocs build
+  artifacts:
+    paths:
+      - src/doc/site/
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+pages:
+  stage: deploy
+  script:
+    - mv src/doc/site/ public/
+  needs:
+    - mkdocs
+  dependencies:
+    - mkdocs
+  artifacts:
+    paths:
+      - public
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

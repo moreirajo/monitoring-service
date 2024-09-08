@@ -1,0 +1,28 @@
+services:
+  db:
+    container_name: monitoring-service-postgres
+    image: postgres:16.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: monitoring_service
+  docs:
+    container_name: monitoring-service-docs
+    image: squidfunk/mkdocs-material:9.5.2
+    ports:
+      - "8000:8000"
+    entrypoint: sh
+    command: -c "pip install mdx_include && mkdocs serve --dev-addr=0.0.0.0:8000"
+    volumes:
+      - ${PWD}/src/doc:/docs
+  monitoring-service:
+    depends_on:
+      - db
+    container_name: monitoring-service-app
+    image: monitoring-service:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_HOST: db

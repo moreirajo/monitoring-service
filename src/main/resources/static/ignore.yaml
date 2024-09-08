@@ -1,0 +1,2 @@
+oas3-valid-schema-example:
+  - $.paths['/jobs'].post.responses['409'].content['application/problem+json'].examples['Job already exists']

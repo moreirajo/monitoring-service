@@ -1,0 +1,50 @@
+server:
+  servlet:
+    context-path: /monitoring-service
+  forward-headers-strategy: native
+
+spring:
+  application:
+    name: monitoring-service
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org:
+        quartz:
+          jobStore:
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:monitoring_service}?currentSchema=monitoring_service
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+
+logging:
+  level:
+    org.quartz: OFF
+    reactor.netty: ERROR
+    com.hansecom.monitoringservice: DEBUG
+
+springdoc:
+  swagger-ui:
+    url: /openapi.yaml
+    use-root-path: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+        exclude: 'traces'
+  endpoint:
+    health:
+      group:
+        readiness:
+          include:
+            - db
+  server:
+    port: 9000
+
+custom-properties:
+  max-jobs-allowed: 5
