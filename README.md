@@ -63,7 +63,7 @@ Use docker compose for all.
 
 Build the docker image:
 ```
-./mvnw jib:dockerBuild 
+./mvnw jib:dockerBuild -Dimage=monitoring-service:latest
 ```
 
 Bootstrap all:
